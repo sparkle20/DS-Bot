@@ -83,6 +83,8 @@ test('check asks for a tenant token and names the bot', async () => {
   assert.equal(account.name, 'fakebot')
   const token = fake.calls.find(call => call.path === '/open-apis/auth/v3/tenant_access_token/internal')
   assert.equal(token.params.app_id, 'cli_a1')
+  const info = fake.calls.find(call => call.path === '/open-apis/bot/v3/info')
+  assert.equal(info.auth, 'Bearer fs-tok')
   await fake.close()
 })
 
