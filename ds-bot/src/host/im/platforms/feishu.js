@@ -198,14 +198,14 @@ export default {
       const gen = generation
       let url
       try {
-        const answer = await env.fetch(`${apiBase(env, fields)}/open-apis/bot/v2/endpoint`, {
+        const answer = await env.fetch(`${apiBase(env, fields)}/callback/ws/endpoint`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ appId, appSecret }),
+          body: JSON.stringify({ AppID: appId, AppSecret: appSecret }),
         })
         const body = await answer.json().catch(() => ({}))
         url = body.data?.URL
-        if (url === undefined) throw new Error(body.msg ?? 'Feishu refused the connection')
+        if (body.code !== 0 || !url) throw new Error(body.msg ?? 'Feishu refused the connection')
       } catch (error) {
         handlers.onStatus({ state: 'error', error: error.message })
         return

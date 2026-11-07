@@ -19,7 +19,7 @@ async function fakeFeishu() {
       let answer = replies[req.url]
       if (answer === undefined && req.url === '/open-apis/auth/v3/tenant_access_token/internal') answer = { result: { tenant_access_token: 'fs-tok', expire: 7200 } }
       if (answer === undefined && req.url === '/open-apis/bot/v3/info') answer = { result: { code: 0, bot: { open_id: 'ou_bot', app_name: 'fakebot' } } }
-      if (answer === undefined && req.url === '/open-apis/bot/v2/endpoint') answer = { result: { code: 0, data: { URL: wss.url } } }
+      if (answer === undefined && req.url === '/callback/ws/endpoint') answer = { result: { code: 0, data: { URL: wss.url } } }
       if (typeof answer === 'function') answer = answer(params)
       if (answer === undefined) answer = { result: { code: 0, data: { message_id: 'om_x' } } }
       res.writeHead(200, { 'content-type': 'application/json' })
@@ -94,7 +94,9 @@ test('a ping gets a pong, a p2p is direct, a group counts only with a mention, d
   const handle = feishu.connect(FIELDS, env(fake), { onMessage: async msg => { messages.push(msg) }, onAction: () => {}, onStatus: () => {} })
   t.after(() => { handle.stop(); fake.close() })
   const ws = await until(() => fake.sockets[0])
-  await until(() => fake.calls.some(call => call.path === '/open-apis/bot/v2/endpoint'))
+  const endpoint = await until(() => fake.calls.find(call => call.path.endsWith('/endpoint')))
+  assert.equal(endpoint.path, '/callback/ws/endpoint')
+  assert.deepEqual(endpoint.params, { AppID: 'cli_a1', AppSecret: 'sec' })
   // The ping sent on connect gets a pong back.
   await until(() => fake.frames.some(({ frame }) => frame.method === 0 && frame.headers.some(h => h.key === 'type' && h.value === 'pong')))
   fake.push(ws, fake.dataFrame('event', message({ chat_type: 'p2p', chat_id: 'oc_1', message_id: 'om_1', message_type: 'text', content: JSON.stringify({ text: 'hello' }) }), { messageId: 'fm1' }))
@@ -147,6 +149,17 @@ test('send posts text and an interactive card, edit patches the message', async 
   assert.ok(patch, 'message PATCH called')
 })
 
+test('connect reports endpoint errors without opening a socket', async (t) => {
+  const fake = await fakeFeishu()
+  fake.replies['/callback/ws/endpoint'] = { result: { code: 1000040346, msg: 'app_id is invalid', data: { URL: '' } } }
+  const statuses = []
+  const handle = feishu.connect(FIELDS, env(fake), { onMessage: () => {}, onAction: () => {}, onStatus: status => statuses.push(status) })
+  t.after(() => { handle.stop(); fake.close() })
+  const status = await until(() => statuses.find(item => item.state === 'error'))
+  assert.equal(status.error, 'app_id is invalid')
+  assert.equal(fake.sockets.length, 0)
+})
+
 test('a dropped socket reconnects through a fresh endpoint', async (t) => {
   const fake = await fakeFeishu()
   const handle = feishu.connect(FIELDS, env(fake), { onMessage: () => {}, onAction: () => {}, onStatus: () => {} })
@@ -154,5 +167,5 @@ test('a dropped socket reconnects through a fresh endpoint', async (t) => {
   const ws = await until(() => fake.sockets[0])
   ws.close()
   await until(() => fake.sockets.length === 2)
-  assert.ok(fake.calls.filter(call => call.path === '/open-apis/bot/v2/endpoint').length >= 2)
+  assert.ok(fake.calls.filter(call => call.path === '/callback/ws/endpoint').length >= 2)
 })
